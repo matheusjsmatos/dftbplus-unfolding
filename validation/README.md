@@ -1,4 +1,6 @@
-# Validação
+# Entradas e exemplos de validação
+
+Para executar os testes automatizados de grafeno 2×2 e diamante, consulte [Testes/](../Testes/README.md). Esta pasta contém entradas do diamante e o exemplo de grafeno 3×3.
 
 - `diamond/compare.py`: compara `unfold.refoldedBands` (Fortran) com `band.out` da célula primitiva (uso: `python3 compare.py <nivel_de_fermi>`).
   O fluxo completo que gera esses arquivos é `claude-fortran-unfold/app_unfold/examples/diamond/run_all.sh`.

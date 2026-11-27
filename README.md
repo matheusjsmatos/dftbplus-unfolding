@@ -6,35 +6,38 @@ O utilitário `Util/Unfolding` do SIESTA serviu de modelo de referência.
 
 | Pasta | Origem | Linguagem | Entrada | Observação |
 |---|---|---|---|---|
-| `claude-fortran-unfold/` | Claude (Anthropic), com validação | Fortran 2008 (dentro da árvore do DFTB+) | `eigenvec.bin` + `band.out` + `detailed.xml` | Programa `unfold`, compilado junto com o DFTB+ |
-| `chatgpt-python-unfold/` | **ChatGPT (OpenAI)**, sem modificações | Python / NumPy | `hamreal1.dat` + `overreal.dat` (WriteRealHS) | Diagonaliza em K arbitrário, saída CSV |
+| `claude-fortran-unfold/` | Claude (Anthropic) | Fortran 2008 (dentro da árvore do DFTB+) | `eigenvec.bin` + `band.out` + `detailed.xml` | Programa `unfold`, compilado junto com o DFTB+ |
+| `chatgpt-python-unfold/` | **ChatGPT (OpenAI)** | Python / NumPy | `hamreal1.dat` + `overreal.dat` (WriteRealHS) | Diagonaliza em K arbitrário, saída CSV |
 
-Documentação em `docs/`:
+Para reproduzir o grafeno 2×2, gerar o gráfico ou rodar o diamante a partir do DFTB+ 26.1, siga o [HOWTO](docs/HOWTO.md). O [Manual](docs/MANUAL.md) descreve os arquivos, as unidades e os parâmetros de cada implementação.
 
-- `MANUAL.md`: referência de entradas, saídas e opções dos dois programas.
-- `HOWTO.md`: receitas por tarefa, com o tutorial completo no diamante.
-- `METODO.md`: como o unfolding é feito (equações e convenções do DFTB+).
-- `DESENVOLVIMENTO_CLAUDE.md`: procedimento de desenvolvimento do código Fortran.
-- `DESENVOLVIMENTO_CHATGPT.md`: o que o código do ChatGPT faz e como foi analisado.
-- `COMPARACAO.md`: validação cruzada entre as duas.
-- `REFERENCIAS.md`: referências usadas como parâmetros.
+## Rodar os testes
+
+Na raiz do repositório, com Python e NumPy, execute
+
+```bash
+python -m pip install -r chatgpt-python-unfold/requirements.txt
+python Testes/run.py
+```
+
+A suíte executa os testes unitários, recompõe as bandas de grafeno a partir das matrizes arquivadas e confere os pesos da projeção. Para repetir a comparação com o executável Fortran em grafeno e diamante, veja [Testes](Testes/README.md). Os exemplos e as entradas auxiliares estão em [validation](validation/README.md).
+
+## Método e desenvolvimento
+
+- [Método e convenções do DFTB+](docs/METODO.md).
+- [Desenvolvimento da implementação Fortran](docs/DESENVOLVIMENTO_CLAUDE.md).
+- [Desenvolvimento da implementação Python](docs/DESENVOLVIMENTO_CHATGPT.md).
+- [Comparação numérica](docs/COMPARACAO.md) e [relatório da execução nativa](chatgpt-python-unfold/docs/DEPURACAO.md).
+- [Referências e parametrização](docs/REFERENCIAS.md).
 
 ## Software de destino
 
-Ambos são feitos para o **DFTB+** (commit analisado `fedabbcb993ef26967141f275bb7d31a984e4bdc`), com base LCAO
+Os dois programas foram testados com o **DFTB+ 26.1** e usam uma base LCAO
 de orbitais tipo Slater lidos de arquivos `wfc.*.hsd` (formato do Waveplot). Não funcionam com outros códigos.
 
 ## Uso rápido (Fortran)
 
-```bash
-git clone https://github.com/dftbplus/dftbplus && cd dftbplus
-git checkout fedabbcb993ef26967141f275bb7d31a984e4bdc
-cp -r /caminho/deste/repo/claude-fortran-unfold/app_unfold app/unfold
-git apply /caminho/deste/repo/claude-fortran-unfold/unfold-cmake.patch   # adiciona add_subdirectory(unfold)
-# compile o DFTB+ como de costume; o executável "unfold" aparece em build/app/unfold
-```
-
-Fluxo e chaves de entrada: `claude-fortran-unfold/app_unfold/README.rst`. Exemplo: `app_unfold/examples/diamond/run_all.sh`.
+Compile o `unfold` junto com o DFTB+ 26.1. O [HOWTO](docs/HOWTO.md) mostra como rodar o exemplo e a [receita usada no GitHub Actions](.github/workflows/validar-unfolding.yml) traz o pacote-fonte, as dependências e os comandos de compilação em Linux. O [guia do aplicativo Fortran](claude-fortran-unfold/app_unfold/README.rst) detalha o HSD.
 
 ## Uso rápido (Python)
 
@@ -42,7 +45,6 @@ Fluxo e chaves de entrada: `claude-fortran-unfold/app_unfold/README.rst`. Exempl
 cd chatgpt-python-unfold
 python -m pip install -r requirements.txt
 python dftb_unfold.py examples/chain/unfold.json -o cadeia.csv
-python -m unittest -v test_unfold
 ```
 
 ## Aviso importante
@@ -52,4 +54,4 @@ nos dois). Com 3ob nos SK e mio no wfc, a regra de soma falhou (0,4–3,8). Com 
 
 ## Licença
 
-Código Fortran: LGPL-3.0 (`LICENSE`), compatível com o DFTB+. Código em `chatgpt-python-unfold/`: licença não especificada.
+O repositório contém o [Fortran sob LGPL-3.0](claude-fortran-unfold/LICENSE) e o [Python sob MIT](chatgpt-python-unfold/LICENSE). [Licenças por diretório](LICENSES.md)

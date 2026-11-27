@@ -3,16 +3,38 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
+      - "Testes/**"
+      - "docs/HOWTO.md"
+      - "docs/MANUAL.md"
       - "chatgpt-python-unfold/**"
       - "claude-fortran-unfold/app_unfold/**"
       - "claude-fortran-unfold/unfold-cmake.patch"
       - "validation/diamond/unfold.json"
+      - "validation/graphene/**"
+      - "claude-fortran-unfold/tools/plot_unfolded.py"
       - ".github/workflows/validar-unfolding.yml"
 
 permissions:
   contents: read
 
 jobs:
+  offline-windows:
+    name: Suíte offline no Windows
+    runs-on: windows-latest
+    timeout-minutes: 12
+    env:
+      OPENBLAS_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r chatgpt-python-unfold/requirements.txt
+      - run: python Testes/run.py
+      - name: Conferir os comandos de unittest da versão anterior
+        working-directory: chatgpt-python-unfold
+        run: python -m unittest -v test_unfold test_compare
+
   bandas:
     runs-on: ubuntu-24.04
     timeout-minutes: 55
@@ -28,13 +50,13 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y gfortran ninja-build libopenblas-dev
-          python -m pip install -r chatgpt-python-unfold/requirements.txt
+          python -m pip install -r chatgpt-python-unfold/requirements.txt Pillow reportlab matplotlib
       - name: Testes Python e grafeno arquivado
-        working-directory: chatgpt-python-unfold
+        run: python Testes/run.py --output results/testes
+      - name: Gerar a figura do grafeno pelo comando do HOWTO
         run: |
-          python -m unittest discover -v
-          python tools/check_graphene.py --output ../results/arquivado
-          python tools/check_projection.py ../results/arquivado/unfolded.csv --output ../results/arquivado/projection.json
+          python chatgpt-python-unfold/spectrum.py results/testes/unfolded.csv --weight refold --range -12 6 --step 0.02 --sigma 0.08 -o results/testes/mapa.npz --pdf results/testes/bandas.pdf
+          test -s results/testes/bandas.pdf
       - name: Obter e compilar o DFTB+ e o Fortran deste repositório
         run: |
           mkdir -p build/deps
@@ -52,20 +74,23 @@ jobs:
           git -C build/deps/mio checkout -q 263e52419ce15222c864df9b3f6fbf58bfbdfa0f
       - name: Comparar Python e Fortran no grafeno e no diamante
         run: |
-          status=0
-          for material in graphene diamond; do
-            python chatgpt-python-unfold/tools/check_native.py "$material" --dftb "$PWD/build/native/app/dftb+/dftb+" --unfold "$PWD/build/native/app/unfold/unfold" --mio "$PWD/build/deps/mio" --output results/native || status=1
-          done
-          if [ "$status" -ne 0 ]; then
-            find results/native \( -name 'run.log' -o -name 'native.log' \) -print -exec tail -n 12 {} \;
+          python Testes/run.py native --dftb "$PWD/build/native/app/dftb+/dftb+" --unfold "$PWD/build/native/app/unfold/unfold" --mio "$PWD/build/deps/mio" --output results/native
+      - name: Rodar os exemplos Fortran do HOWTO e conferir as figuras
+        run: bash Testes/check_howto.sh build/native/app build/deps/mio results/howto
+      - name: Mostrar os logs de cálculo em caso de falha
+        if: failure()
+        run: |
+          if [ -d results ]; then
+            find results \( -name 'run.log' -o -name 'native.log' -o -name 'unfold.out' -o -name 'scc*.out' -o -name 'list.out' \) -print -exec tail -n 12 {} \;
           fi
-          exit "$status"
       - name: Guardar entradas, diagnósticos e resultados
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: validacao-unfolding
           path: |
+            results/testes/bandas.pdf
+            results/howto/**/*.png
             results/**/*.json
             results/**/*.log
             results/**/dftb_in.hsd

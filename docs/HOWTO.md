@@ -1,181 +1,169 @@
-# HOWTO: receitas por tarefa
+# HOWTO de unfolding de bandas no DFTB+
 
-Receitas práticas para os dois programas. As opções estão detalhadas em `MANUAL.md` e a teoria em `METODO.md`. Os exemplos usam o diamante cúbico de 8 átomos desdobrado na célula primitiva fcc (parâmetros mio-1-1), que é o caso validado.
+Os comandos partem da **raiz deste repositório**. O exemplo de grafeno arquivado roda em Python no Windows ou no Linux. As receitas que usam `bash`, `sed` ou variáveis como `$BIN` usam Bash em Linux. Consulte o [Manual](MANUAL.md) para a referência das entradas e o [Método](METODO.md) para as equações.
 
-Conteúdo:
+## Rodar e plotar o grafeno 2×2 já calculado
 
-1. Tutorial completo no diamante, com o código Fortran
-2. Tutorial completo no diamante, com o código Python
-3. Definir a supercélula e a célula de referência
-4. Escolher caminho em k, janela de energia e nível de Fermi
-5. Escolher o corte dos vetores g
-6. Diagnosticar uma regra de soma ruim
-7. Desdobrar um sistema com defeito e compará-lo ao cristal perfeito
-8. Grafeno e sistemas 2D
-9. Sistemas grandes: custo e escolha do código
-10. Comparar com as bandas da célula primitiva
-11. Spin
+O pacote inclui matrizes H/S e bandas de referência calculadas no DFTB+ para o grafeno puro. Para reproduzir o unfolding com a base mio-1-1 e gerar a figura em PDF, execute os comandos abaixo. A instalação de Pillow e ReportLab serve para a figura.
 
----
+```bash
+python -m pip install -r chatgpt-python-unfold/requirements.txt
+python -m pip install Pillow reportlab
+python chatgpt-python-unfold/tools/check_graphene.py --output results/graphene
+python chatgpt-python-unfold/spectrum.py results/graphene/unfolded.csv --weight refold --range -12 6 --step 0.02 --sigma 0.08 -o results/graphene/mapa.npz --pdf results/graphene/bandas.pdf
+```
+
+Abra **`results/graphene/bandas.pdf`**. A intensidade representa o peso espectral refoldado ao longo de Γ–K–M–Γ. A abscissa é a distância acumulada em Å⁻¹. A janela vertical vai de −12 a +6 eV em relação ao zero do arquivo DFTB+ (`reference_ev = 0` no exemplo). Para apresentar $E-E_F$ em um cálculo próprio, use em `reference_ev` o Fermi do seu SCC e gere novamente o CSV. Para representar apenas a projeção em $\mathbf q$, troque `--weight refold` por `--weight full`. A seção 8 explica a diferença para as bandas π.
+
+A execução gera **2.272 estados no CSV** (71 pontos × 32 bandas). Em `results/graphene/validation.json`, procure `"passed": true`. Esse teste compara os autovalores com os da supercélula e a posição dos estados com peso com as bandas da célula primitiva. Os arquivos de entrada e a configuração estão em [referência do grafeno](../chatgpt-python-unfold/examples/graphene/reference/).
+
+## Executar os testes do projeto
+
+Com as dependências Python instaladas, rode a suíte offline a partir da raiz.
+
+```bash
+python Testes/run.py --output results/testes
+```
+
+Para gerar novos cálculos de grafeno **e** diamante e comparar os pesos absolutos de Python e Fortran, use os executáveis `dftb+` e `unfold` compilados com **DFTB+ 26.1**. O workflow contém os comandos para obter o pacote-fonte 26.1, incluir o diretório `app/unfold` e compilar ambos os alvos. A opção `--mio` recebe a raiz do repositório de parâmetros, contendo `skfiles/C-C.skf` e `extras/wfc.hsd`. A suíte verifica o SHA-256 desses dois arquivos. [Compilação testada](../.github/workflows/validar-unfolding.yml) · [Versão de mio usada](https://github.com/dftbparams/mio/tree/263e52419ce15222c864df9b3f6fbf58bfbdfa0f)
+
+```bash
+python Testes/run.py native --dftb /caminho/build/native/app/dftb+/dftb+ --unfold /caminho/build/native/app/unfold/unfold --mio /caminho/mio --output results/native
+```
+
+A execução cria uma pasta nova por material. Em `results/native`, procure `validation.json` para a comparação com as bandas primitivas, `states.json` para a verificação dos autovetores na métrica S e `comparison.json` para os mapas. O teste compara separadamente depósito linear e alargamento gaussiano com σ = 0,08 eV. Nesse último caso, a diferença L1 relativa no mapa refoldado foi **0,0236% para o grafeno** e **0,0255% para o diamante**. [Critérios, resultados e referências](../chatgpt-python-unfold/docs/DEPURACAO.md)
 
 ## 1. Tutorial completo no diamante (Fortran)
 
-**Pré-requisito:** DFTB+ compilado com `app/unfold` (veja o `README.md` da raiz), os arquivos SK **mio-1-1** e os executáveis em `<build>/app`.
-
-O script do exemplo faz tudo:
+O exemplo usa uma célula cúbica de oito átomos de carbono e a desdobra sobre a primitiva fcc. Ajuste os dois caminhos absolutos abaixo. `SKDIR` aponta para a pasta que contém `C-C.skf`, e `BIN` para a pasta comum dos dois executáveis. A cópia do exemplo em uma pasta nova preserva os resultados anteriores, pois `run_all.sh` recria `run1/` e `run2/`.
 
 ```bash
-cd claude-fortran-unfold/app_unfold/examples/diamond
-SKDIR=/caminho/para/mio-1-1 BIN=/caminho/para/build/app ./run_all.sh
+export SKDIR=/caminho/mio/skfiles
+export BIN=/caminho/build/native/app
+mkdir -p results
+DIAM=$(mktemp -d "$PWD/results/diamante.XXXXXX")
+cp -R claude-fortran-unfold/app_unfold/examples/diamond/. "$DIAM/"
+bash "$DIAM/run_all.sh"
+python -m pip install matplotlib
+python claude-fortran-unfold/tools/plot_unfolded.py "$DIAM/run2/unfold.refoldedBands" -o "$DIAM/refolded.png"
 ```
 
-O que ele faz, passo a passo (útil para adaptar a outros sistemas):
-
-1. **Cálculo SCC da supercélula** (`run1/`): converge as cargas e grava `charges.bin`.
-2. **`Action = ListKPoints`** (`unfold_list.hsd`): `unfold` lê o caminho `QPoints` e escreve `unfold.kpoints.hsd` com os k-pontos necessários.
-3. **Cálculo não-SCC nesses k-pontos** (`run2/`): o `dftb_in.hsd` ganha
-
-   ```hsd
-   Hamiltonian = DFTB {
-     SCC = Yes
-     MaxSCCIterations = 1
-     ReadInitialCharges = Yes
-     <<+ "unfold.kpoints.hsd"
-   }
-   Analysis { WriteEigenvectors = Yes }
-   Options { WriteDetailedXML = Yes }
-   ```
-
-4. **`Action = Unfold`** (`unfold_run.hsd`): o `@FERMI@` é substituído pelo nível de Fermi de `run1/detailed.out`. Saída: `run2/unfold.unfoldedBands` e `run2/unfold.refoldedBands`.
-
-Para ver o resultado:
-
-```bash
-python3 claude-fortran-unfold/tools/plot_unfolded.py run2/unfold.refoldedBands -o refolded.png
-```
-
-Esperado no diamante: o mapa segue as bandas da célula primitiva (veja `docs/figures/diamond_unfold.png`) e a regra de soma no `unfold.out` fica em 0,976–0,999.
+1. O cálculo SCC em `run1/` converge a densidade e grava `charges.bin`.
+2. Com `Action = ListKPoints`, o `unfold` lê o caminho da referência em `unfold_list.hsd` e escreve `run1/unfold.kpoints.hsd`.
+3. O exemplo copia as cargas e a lista de k-pontos para `run2/`. O DFTB+ lê as cargas com `ReadInitialCharges = Yes`, executa uma iteração com `MaxSCCIterations = 1` e grava `band.out`, `detailed.xml` e `eigenvec.bin`. Mantenha juntos os três arquivos dessa mesma execução.
+4. Com `Action = Unfold`, o script substitui `@FERMI@` pelo Fermi em eV do SCC e produz `run2/unfold.unfoldedBands` e `run2/unfold.refoldedBands`. Abra `refolded.png` para ver o mapa. A figura usa o índice do ponto de caminho no eixo horizontal. A regra de soma fica em `run2/unfold.out`. [Entradas do exemplo](../claude-fortran-unfold/app_unfold/examples/diamond/)
 
 ## 2. Tutorial completo no diamante (Python)
 
-1. **Cálculo SCC da supercélula**, para obter `charges.bin`, igual ao passo 1 da receita anterior. Ative em `Options`: `WriteDetailedXML = Yes`.
-2. **Exporte as matrizes.** Em uma pasta nova, copie `charges.bin` e use o arquivo `validation/diamond/dftb_in_writeRealHS.hsd` como modelo. Ele traz `ReadInitialCharges = Yes`, `RecomputeAfterDensity = No` e `WriteRealHS = Yes` (veja o próprio arquivo, incluindo o bloco `SlaterKosterFiles`, cujo `Prefix` você precisa ajustar ao seu caminho). O DFTB+ grava `hamreal1.dat` e `overreal.dat` e termina com "Hamilton/Overlap written, exiting program.".
-3. **Copie** para a mesma pasta o `detailed.xml` do passo 1 e o `wfc_C.hsd` do conjunto mio-1-1.
-4. **Configure** `validation/diamond/unfold.json`:
+Os comandos a seguir reutilizam o SCC da receita 1, na mesma sessão Bash, com `$DIAM`, `$BIN` e `$SKDIR` definidos. Se você já tem um cálculo próprio, substitua o modelo pela **mesma geometria, parametrização, ordem de átomos e orbitais** usadas para convergir as cargas.
 
-   ```json
-   {"geometry": "detailed.xml", "wfc_files": ["wfc_C.hsd"],
-    "supercell_matrix": [[-1,1,1],[1,-1,1],[1,1,-1]],
-    "path_frac": [[0.5,0.5,0.5],[0,0,0],[0,0.5,0.5]],
-    "intervals": [20, 25], "gcut_ry": 20.0, "reference_ev": -1.0731}
-   ```
-
-   `reference_ev` é o nível de Fermi do passo 1.
-
-5. **Planeje e rode:**
+1. Exporte os blocos reais de H e S em uma pasta separada. O modelo recebe as cargas convergidas e ativa `ReadInitialCharges`, `WriteRealHS` e `ShowFoldedCoords`, com `RecomputeAfterDensity = No`.
 
    ```bash
-   python dftb_unfold.py unfold.json --plan
-   python dftb_unfold.py unfold.json -o saida.csv
-   python spectrum.py saida.csv --range -25 15 --sigma 0.1 --weight refold -o mapa.npz --pdf mapa.pdf
+   EXP="$DIAM/export"
+   mkdir -p "$EXP"
+   cp "$DIAM/run1/charges.bin" "$EXP/"
+   sed "s|/caminho/para/mio-1-1/|${SKDIR%/}/|" validation/diamond/dftb_in_writeRealHS.hsd > "$EXP/dftb_in.hsd"
+   (cd "$EXP" && "$BIN/dftb+/dftb+" > matrizes.log 2>&1)
+   grep 'Hamilton/Overlap written' "$EXP/matrizes.log"
+   ls -l "$EXP/hamreal1.dat" "$EXP/overreal.dat"
    ```
 
-   O `--plan` deve informar 8 átomos, 46 pontos, 113 vetores de refolding e 45 K distintos, e `commensurate: True`. O CSV tem 1472 linhas.
+   O DFTB+ pode encerrar a exportação com código de saída diferente de zero. Confira a mensagem no log **e** os dois arquivos preenchidos antes de prosseguir.
+
+2. Copie a geometria XML do SCC, os orbitais de carbono e a configuração do exemplo. Os caminhos dentro do JSON são relativos à pasta do próprio JSON.
+
+   ```bash
+   cp "$DIAM/run1/detailed.xml" "$DIAM/wfc_C.hsd" "$EXP/"
+   cp validation/diamond/unfold.json "$EXP/"
+   ```
+
+   Confira `reference_ev` em `$EXP/unfold.json`. O valor fornecido, −1,0731 eV, é a referência usada no teste do diamante. Para plotar $E-E_F$ do seu cálculo, use o Fermi do SCC em eV.
+
+3. Planeje e calcule a partir da raiz do repositório.
+
+   ```bash
+   python chatgpt-python-unfold/dftb_unfold.py "$EXP/unfold.json" --plan
+   python chatgpt-python-unfold/dftb_unfold.py "$EXP/unfold.json" -o "$EXP/saida.csv"
+   python chatgpt-python-unfold/spectrum.py "$EXP/saida.csv" --range -25 15 --sigma 0.1 --weight refold -o "$EXP/mapa.npz" --pdf "$EXP/mapa.pdf"
+   ```
+
+   O plano informa 8 átomos, 46 pontos, 113 vetores de refolding, 45 K distintos e `commensurate: True`. O CSV contém 1.472 estados além do cabeçalho. A figura usa σ = 0,1 eV. Para reproduzir a comparação gaussiana da suíte nativa no diamante, use `--sigma 0.08 --step 0.1`.
 
 ## 3. Definir a supercélula e a célula de referência
 
-- **Fortran:** informe a célula de refolding em `RefoldingLatticeVectors` (linhas, com unidade). A supercélula vem do `detailed.xml`.
-- **Python:** `supercell_matrix` é a matriz inteira $M$ tal que $A_{\rm SC}=M\,A_{\rm ref}$, com vetores nas **linhas**. Se a supercélula não for múltipla inteira da referência, use `reference_cell_angstrom` com os três vetores.
-- **Conferência do $M$:** para o diamante, a célula cúbica de 8 átomos contém 4 células primitivas fcc, e a matriz acima tem determinante 4. O determinante de $M$ é o número de células de referência na supercélula.
-- Células incomensuráveis (amorfos, defeitos com relaxação forte) funcionam no Python (veja `--plan`). Cada $\mathbf g$ pode então exigir uma diagonalização própria, e o custo cresce com o corte.
+- No Fortran, informe a célula de refolding em `RefoldingLatticeVectors [Angstrom]`, um vetor por linha. A supercélula vem de `detailed.xml`.
+- No Python, `supercell_matrix` é a matriz inteira $M$ tal que $A_{\rm SC}=M A_{\rm ref}$, com vetores nas linhas. Para o diamante, $M$ tem linhas $(-1,1,1)$, $(1,-1,1)$ e $(1,1,-1)$. Seu determinante em módulo é 4, o número de primitivas na célula cúbica. [JSON do diamante](../validation/diamond/unfold.json)
+- Para uma referência incomensurável, use `reference_cell_angstrom` com os três vetores. A comensurabilidade depende dos **vetores de rede**. Uma vacância ou o relaxamento interno dos átomos pode conservar esses vetores. Use `--plan` para saber se diferentes $\mathbf q+\mathbf g$ exigirão diferentes $\mathbf K$.
 
-## 4. Escolher caminho em k, janela de energia e nível de Fermi
+## 4. Escolher caminho, janela de energia e nível de Fermi
 
-- **Caminho.** Os dois programas usam coordenadas fracionárias da base recíproca da **referência**. Para L–Γ–X do fcc: `0.5 0.5 0.5` → `0 0 0` → `0 0.5 0.5`.
-  - Fortran: `QPoints = { 1 0.5 0.5 0.5  20 0.0 0.0 0.0  25 0.0 0.5 0.5 }`.
-  - Python: `"path_frac": [[0.5,0.5,0.5],[0,0,0],[0,0.5,0.5]]`, `"intervals": [20, 25]`.
-- **Fortran:** depois de mudar o caminho, **rode de novo** `ListKPoints` e o cálculo no DFTB+ (receita 1, passos 2 e 3), pois os k-pontos calculados mudam. O Python não precisa disso.
-- **Nível de Fermi.** Pegue de `detailed.out` do cálculo SCC (linha "Fermi level"). Fortran: `Energy { FermiLevel [eV] = ... }`. Python: `reference_ev`.
-- **Janela.** Fortran: `Energy { Window [eV] = {-25 15} }`. Python: `window_ev` no JSON, ou `--range` no `spectrum.py`. Em semicondutores a banda de valência inicia perto de −20 eV em relação ao Fermi (diamante), então uma janela de −25 a 15 eV cobre todas as bandas ocupadas.
-- **Alargamento.** Fortran: `Energy { Broadening }` (0 = sem alargamento). Python: `--sigma` em `spectrum.py` (padrão 0,06 eV).
+- Os dois programas recebem o caminho em coordenadas fracionárias da base recíproca da **referência**. Para L–Γ–X do diamante, use `[0.5,0.5,0.5]`, `[0,0,0]` e `[0,0.5,0.5]`. No Python, `"intervals": [20,25]` produz $1+20+25=46$ pontos. No Fortran, veja a entrada multilinha `QPoints`. [Exemplo HSD](../claude-fortran-unfold/app_unfold/examples/diamond/unfold_run.hsd)
+- Ao mudar caminho, célula de referência ou corte no Fortran, rode `ListKPoints` para saber quais estados são necessários. Refaça o cálculo de bandas quando faltarem k-pontos no arquivo de autovetores. O Python pode reutilizar as matrizes H/S para outro caminho.
+- Para usar $E-E_F$, leia o valor em **eV** da linha `Fermi level` do `detailed.out` do SCC. Ajuste `Energy { FermiLevel [eV] = ... }` no Fortran e `reference_ev` no JSON. A mesma origem deve valer para o mapa e para as bandas sobrepostas.
+- No Fortran, `Energy { Window [eV] = {-25 15} }` define a malha. No Python, `window_ev` filtra os estados **antes** de gravar o CSV. Para preservar as caudas das linhas próximas às bordas, guarde o CSV completo e limite a figura com `--range`. A janela do teste do diamante é de −25 a +15 eV.
+- `Broadening [eV]` e `--sigma` são o desvio padrão da gaussiana. Com zero, ambos distribuem linearmente o peso pelos dois pontos de energia vizinhos. Para comparar intensidades absolutas, use o mesmo passo e a mesma largura. O Fortran grava peso por intervalo, enquanto `spectrum.py` fornece densidade em eV⁻¹. Divida os valores do mapa Fortran por ΔE ou use o comparador da suíte.
 
 ## 5. Escolher o corte dos vetores g
 
-O corte controla a precisão do refolding. O peso em $\mathbf q+\mathbf g$ decai com $\lvert\mathbf g\rvert$, mas devagar, por causa do truncamento brusco da STO em $r_c$.
+Comece com `RefoldingGCutoff [Hartree] = 10` no Fortran ou `"gcut_ry": 20` no Python. Essa escolha produz 113 vetores no diamante. Dobre o corte e compare o peso integrado e as bandas de interesse mantendo janela, passo e caminho fixos. A conversão é $E_{\rm Ry}=2 E_{\rm Ha}$. A quantidade de vetores depende da célula de referência.
 
-1. Rode com um corte moderado (Fortran: 10 Hartree, o padrão; Python: 20 Ry).
-2. Rode de novo com o dobro.
-3. Compare o peso total refolded na janela de energia. Se mudar pouco, o corte basta.
+Cortes maiores aumentam a soma sobre $\mathbf g$. Em uma supercélula comensurável, $\mathbf q+\mathbf g$ pertence ao mesmo $\mathbf K$ dobrado para cada $\mathbf q$. Para uma referência incomensurável, reveja a lista de k-pontos conforme a seção 4.
 
-**Conversão:** `gcut_ry = 2 × corte_Hartree`. As duas escolhas acima são equivalentes e dão 113 vetores no diamante.
+## 6. Diagnosticar a regra de soma
 
-Cuidado: um corte maior aumenta o custo linearmente no número de vetores. No Fortran, as diagonalizações já foram feitas pelo DFTB+, então o corte só afeta o pós-processamento.
+O Fortran estima a soma de pesos em ondas planas para autovetores normalizados. No exemplo original do diamante, o intervalo relatado foi 0,976–0,999. O resultado depende da cobertura em momento e da consistência dos radiais Waveplot com a sobreposição DFTB+. [Método e regra de soma](METODO.md)
 
-## 6. Diagnosticar uma regra de soma ruim
+1. Confira se os radiais `wfc` e os arquivos `.skf` pertencem ao mesmo conjunto de parâmetros. O exemplo usa mio-1-1 nos dois.
+2. Rode `Action = CheckBasis` com os arquivos nativos da execução de bandas. Inclua k-pontos genéricos. Só Γ é insuficiente para testar a convenção de fase.
+3. No DFTB+ validado, use `KPointSign = -1`. Confirme que os autovetores, o XML e as energias vieram da mesma execução antes de investigar outra convenção.
+4. Aumente `SumRuleQMax` (padrão de 8 bohr⁻¹) e examine a convergência. Confira também a ordem dos orbitais do Waveplot, por exemplo $p_y,p_z,p_x$. As implementações cobrem $s,p,d,f$.
+5. Para testar a etapa anterior à projeção, consulte o `states.json` do modo nativo. A métrica $C^\dagger S C=I$ verifica a normalização dos autovetores na base LCAO. A soma em ondas planas testa também os radiais e o corte.
 
-A regra de soma é o teste mais importante (veja a seção 5 de `METODO.md`). Ela é impressa em `unfold.out` pelo Fortran. O valor esperado é perto de 1 (0,97–1,00).
+## 7. Comparar um defeito com o cristal perfeito
 
-**Passo 1: confira o conjunto.** O `wfc` e os arquivos `.skf` devem ser do **mesmo conjunto** (por exemplo, os dois mio-1-1). Com SK 3ob e `wfc` do mio, o resultado foi 0,4–3,8.
-
-**Passo 2: rode só o teste.** No Fortran, `Action = CheckBasis`. Ele examina k-pontos genéricos do arquivo, e é rápido.
-
-**Passo 3: confira o sinal de K.** O TRIM (por exemplo Γ) não distingue `KPointSign = ±1`. Se os valores estão ruins só em k-pontos genéricos, teste `KPointSign = 1`. O padrão −1 foi verificado no diamante e no grafeno.
-
-**Passo 4: confira a faixa de $q$.** Aumente `SumRuleQMax` (padrão 8 bohr⁻¹). Se a soma sobe e satura, era a faixa.
-
-**Passo 5: confira a ordem dos orbitais e $l$.** As harmônicas seguem a ordem do Waveplot (p: y, z, x). Bases com $l>3$ não são suportadas.
-
-No Python não há impressão da regra de soma. Para checá-la, rode primeiro o Fortran no mesmo sistema, ou use o `test_unfold.py`, que verifica $C^\dagger S C=I$ em casos de teste.
-
-## 7. Desdobrar um sistema com defeito e compará-lo ao cristal perfeito
-
-Receita genérica (a do artigo para a vacância em Si [1]):
-
-1. Calcule o cristal perfeito na mesma supercélula (ou na primitiva) e o sistema com defeito, com a mesma parametrização e a mesma célula de refolding.
-2. Desdobre os dois com o mesmo caminho, a mesma janela e o mesmo `Fermi`/`reference_ev` (cada um com o **seu** nível de Fermi).
-3. Compare os mapas, ou a diferença. Estados novos aparecem como peso dentro do gap. O topo da banda de valência perde peso e pode descer em energia.
-4. Atenção à comparação direta: o nível de Fermi do defeito difere do perfeito. Se desenhar os dois com origem em $E_F$, a diferença de alinhamento aparece como deslocamento. Comente isso nos resultados.
-
-Mantenha os parâmetros numéricos (malha de k, tolerância SCC) consistentes entre os dois cálculos, para que as diferenças venham do defeito e não do método numérico.
+1. Calcule o cristal perfeito e o sistema com defeito com parametrização, tolerância SCC e densidades de malha k comparáveis.
+2. Desdobre os dois sobre a mesma célula de referência e use o mesmo caminho, janela, passo, corte e alargamento.
+3. Para estudar os estados em torno do potencial químico, represente cada mapa em relação ao **seu próprio** $E_F$. Para medir um deslocamento entre os dois sistemas, alinhe antes as energias por uma referência física comum e registre essa escolha.
+4. Compare a posição e a intensidade das bandas. Procure perda de peso de uma banda ideal ou estados dentro do gap. Para comparar amplitudes ou subtrair os mapas, mantenha a mesma escala de intensidade. [Mayo, Yndurain e Soler, exemplo da vacância em Si](https://doi.org/10.1088/1361-648X/ab6e8e)
 
 ## 8. Grafeno e sistemas 2D
 
-- Mantenha o **mesmo vácuo** na supercélula e na célula de referência.
-- A referência 3D para uma folha tem o terceiro vetor igual ao da supercélula.
-- Orbitais $p_z$ são ímpares em $z$, então sua transformada se anula em $q_z=0$. O peso total no plano $q_z=0$ pode desaparecer nas bandas π só no `weight_full`. O refolding com $g_z\neq0$ recupera o peso. Para ver as bandas π, use o `weight_refold` (Python) ou `RefoldingLatticeVectors` com o vetor vertical (Fortran).
-- O exemplo validado é a supercélula 3×3 (18 átomos), em `validation/graphene/` (`gen.py`, `mk.sh`). Os caminhos nos scripts apontam para o diretório de compilação local: ajuste-os.
-- Para o Python, o exemplo `examples/graphene/validate_graphene.py` exige `dftb+`, os arquivos SK e o `wfc` (veja o `README.md` da pasta). Não foi reexecutado neste projeto.
+- Mantenha o mesmo vetor de vácuo na supercélula e na referência para comparar pesos com a mesma normalização de volume.
+- No grafeno plano, a simetria dos orbitais $p_z$ pode suprimir a projeção direta em $q_z=0$. O mapa refoldado soma intensidades em $\mathbf q+\mathbf g$, incluindo termos com $g_z\ne0$ quando o corte os alcança. Assim as bandas π podem reaparecer. No Python use `--weight refold`. No Fortran forneça os três `RefoldingLatticeVectors` e examine `.refoldedBands`.
+- O exemplo arquivado e a comparação nativa automatizada usam grafeno ideal **2×2, 8 C**, 25 Ry e o caminho Γ–K–M–Γ. [Geometria e parâmetros](../chatgpt-python-unfold/examples/graphene/)
+- Há uma receita adicional **3×3, 18 C** em [validation/graphene](../validation/graphene/). `gen.py` grava a primitiva e a supercélula no diretório corrente. Defina `BIN` e `SKDIR` como na receita 1 e copie o bloco radial do carbono mio-1-1 para a pasta da execução.
 
-## 9. Sistemas grandes: custo e escolha do código
+  ```bash
+  mkdir -p results
+  G3=$(mktemp -d "$PWD/results/grafeno3.XXXXXX")
+  cp -R validation/graphene/. "$G3/"
+  cp claude-fortran-unfold/app_unfold/examples/diamond/wfc_C.hsd "$G3/"
+  (cd "$G3" && python gen.py && bash mk.sh)
+  ```
 
-| | Fortran | Python |
+  Confira a existência de `$G3/run2/unfold.refoldedBands` e o log `$G3/run2/unfold.out`, pois o script prossegue para o cálculo primitivo mesmo se o unfolding falhar. O caminho fornecido começa em (⅓,⅓,0). Para usar o mesmo vértice K = (⅔,⅓,0) do teste 2×2, ajuste os dois arquivos `unfold_*.hsd` e o bloco `Klines` da primitiva em `mk.sh`, mantendo a mesma ordem de pontos.
+
+## 9. Estimar o custo em sistemas grandes
+
+| Operação | Fortran | Python |
 |---|---|---|
-| Quantas diagonalizações? | Nenhuma extra. Usa as do DFTB+ nos k-pontos de `ListKPoints` | Uma por (K, spin), densa em Python |
-| Para supercélula comensurável | Poucos k-pontos distintos, porque muitos $\mathbf q+\mathbf g$ dobram no mesmo $\mathbf K$ | Idem. Veja `--plan` |
-| Gargalo | O cálculo do DFTB+ | Memória $\mathcal O(N_{\rm orb}^2)$ e tempo $\mathcal O(N_{\rm orb}^3)$ por K |
+| Autovetores | Lê os que o DFTB+ calculou nos k-pontos pedidos por `ListKPoints`. | Reconstrói H e S e diagonaliza uma vez por par (K, spin). |
+| Custos a estimar | Cálculo DFTB+, tamanho de `eigenvec.bin` e soma sobre $\mathbf g$. | Matrizes densas de ordem $N_{\rm orb}$, diagonalização cúbica por K e projeções por lote. |
 
-Recomendações:
+Use `--plan` para contar pontos e vetores antes de um cálculo grande. `q_batch` controla a memória temporária da projeção e `window_ev` limita os estados projetados e gravados. A diagonalização densa ainda exige memória da ordem de $N_{\rm orb}^2$ por K. O Python permite testar vários caminhos com o mesmo conjunto H/S.
 
-- Para muitos átomos e caminho fixo, prefira o **Fortran**.
-- Para explorar caminhos diferentes sem repetir cálculos no DFTB+, ou para K arbitrário, prefira o **Python**.
-- No Python, rode sempre `--plan` antes. Se faltar memória, reduza `q_batch` e use `window_ev` para limitar as bandas.
+## 10. Sobrepor as bandas da célula primitiva
 
-## 10. Comparar com as bandas da célula primitiva
-
-1. Rode um cálculo DFTB+ de bandas da célula primitiva, com o mesmo caminho. Isso gera um `band.out`.
-2. Fortran: use `plot_unfolded.py` com `--ref`:
+1. Gere um `band.out` da primitiva com o **mesmo caminho físico e os mesmos pontos, na mesma ordem**. O `run_all.sh` do diamante produz o mapa da supercélula. O modo `native` em `Testes/run.py` gera também as bandas primitivas, em `pc_bands/band.out`.
+2. O gráfico Fortran usa o índice do ponto ao longo do caminho. Defina `MAPA` como o arquivo `.refoldedBands` e `PRIMITIVA` como o `band.out` correspondente. O exemplo usa a origem −1,0731 eV do teste de diamante.
 
    ```bash
-   python3 claude-fortran-unfold/tools/plot_unfolded.py run2/unfold.refoldedBands \
-       --ref prim/bands/band.out -1.0731 -o comparacao.png
+   python claude-fortran-unfold/tools/plot_unfolded.py "$MAPA" --ref "$PRIMITIVA" -1.0731 -o comparacao.png
    ```
 
-   O último número é o nível de Fermi usado como origem das bandas de referência.
-
-3. Para uma comparação numérica (fração do peso a menos de 0,15 eV das bandas primitivas e desvio do centróide), veja `validation/diamond/compare.py`. Uso: `python3 compare.py <nivel_de_fermi>`. Ele lê `run2/unfold.refoldedBands` e `prim/bands/band.out`, então rode-o na pasta do cálculo.
+3. Para medir a fração de peso a menos de 0,15 eV das bandas primitivas e o desvio dos centróides, use [compare.py](../validation/diamond/compare.py). O script lê os nomes fixos `run2/unfold.refoldedBands` e `prim/bands/band.out` relativamente à pasta do cálculo. A suíte em `Testes/` compara também os pesos absolutos dos dois programas.
 
 ## 11. Spin
 
-- **Sem polarização de spin:** caso validado.
-- **Colinear polarizado:** o Fortran grava um arquivo por canal (segundo o README do `app_unfold`), o Python usa `hamreal1.dat` e `hamreal2.dat` e produz as colunas `spin` (1 ou 2). Esse caso **não foi validado** neste projeto.
-- **Não colinear e SOC:** sem suporte nos dois.
+Os exemplos nativos de grafeno e diamante usam um canal escalar. Para spin colinear, o Fortran grava os sufixos `.spinUp` e `.spinDn`. No Python, inclua `hamreal1.dat` e `hamreal2.dat` com a sobreposição comum e escolha `--spin 1` ou `--spin 2` em `spectrum.py`. Há teste unitário com uma base colinear sintética. A comparação nativa publicada usa carbono sem polarização. Os dois programas requerem Hamiltonianos escalares ou colineares e não implementam SOC.
