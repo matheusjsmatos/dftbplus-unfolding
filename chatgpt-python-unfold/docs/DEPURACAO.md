@@ -29,6 +29,21 @@ No carbono mio-1-1, mediram-se normas radiais 0,9999993382 (s) e 0,9999991246 (p
 
 O depósito linear com $\sigma=0$ reparte a linha entre os dois pontos de energia adjacentes, inclusive na borda da janela. Com $\sigma>0$, ambos usam o mesmo desvio-padrão em eV. O Fortran publicado corta a gaussiana a 5σ e o Python a 8σ. A saída Fortran é peso por intervalo. A comparação divide por ΔE antes de calcular as diferenças. Relatam-se o maior erro absoluto em peso/eV, sua razão com o pico Python e a norma L1 relativa, sem renormalizar os mapas. O JSON também registra os dois pesos integrados por bins, o peso do CSV com janela rígida e os extremos da variação relativa por ponto q com sinal significativo. Esses totais permitem testar o efeito das bordas no número originalmente publicado. [Convenções do repositório](../../docs/METODO.md)
 
+## Comparação com o executável Fortran
+
+O GitHub Actions compilou o DFTB+ 26.1 junto com o `unfold` de `claude-fortran-unfold/` e rodou a diagonalização, a projeção e o refolding para os dois cristais. Os 11 testes Python e as quatro comparações nativas passaram. A tabela mede a diferença L1 relativa em todo o mapa, $100\sum_{q,E}|I_{\rm Fortran}-I_{\rm Python}|/\sum_{q,E}|I_{\rm Python}|$. [Execução e relatórios no GitHub Actions](https://github.com/matheusjsmatos/dftbplus-unfolding/actions/runs/45932713924)
+
+| Material | Depósito na malha | L1 do unfolding completo | L1 do refolding |
+|---|---|---:|---:|
+| Grafeno 2×2 | Linear, ΔE = 0,05 eV | 0,0877% | 0,0956% |
+| Grafeno 2×2 | Gaussiano, σ = 0,08 eV | 0,0222% | 0,0236% |
+| Diamante, 8 átomos | Linear, ΔE = 0,10 eV | 0,0534% | 0,0515% |
+| Diamante, 8 átomos | Gaussiano, σ = 0,08 eV | 0,0270% | 0,0255% |
+
+Os autovalores reconstruídos a partir de H/S apresentaram diferenças máximas de 5,18 × 10⁻⁵ eV no grafeno e 5,07 × 10⁻⁵ eV no diamante em relação ao `band.out`. A maior componente de $C^\dagger S C-I$ em módulo foi 2,90 × 10⁻¹³ nos dois ensaios considerados em conjunto.
+
+No diamante, a soma do peso refoldado nos 46 pontos, com depósito linear na janela de −25 a +15 eV, foi **323,17491** no Fortran e **323,17275** no Python. A diferença relativa integrada por ponto variou de −0,00224% a +0,00137%. O excesso de 1,7–3,7% do ensaio anterior não se repetiu. Para atribuir uma causa à diferença histórica seriam necessários os arquivos daquele cálculo. Esta validação cobre carbono com base s,p do mio-1-1 em grafeno ideal e diamante.
+
 ## Reproduzir a validação nativa
 
 O aplicativo Fortran deste repositório usa as assinaturas do DFTB+ 26.1 para `printDftbHeader` e `warnUnprocessedNodes`. A tentativa de compilação com 25.1 identificou uma incompatibilidade nessas duas chamadas. O teste usa o pacote-fonte 26.1 e verifica seu SHA-256 antes de compilar. [Release 26.1](https://github.com/dftbplus/dftbplus/releases/tag/26.1)
