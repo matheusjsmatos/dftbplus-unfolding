@@ -1,0 +1,24 @@
+Action = Unfold
+DetailedXML = "detailed.xml"
+EigenvecBin = "eigenvec.bin"
+BandOut = "band.out"
+Output = "unfold"
+Energy {
+  Window [eV] = {-25.0 15.0}
+  NrOfIntervals = 400
+  FermiLevel [eV] = @FERMI@
+}
+RefoldingLatticeVectors [Angstrom] = {
+  0.0     1.7835  1.7835
+  1.7835  0.0     1.7835
+  1.7835  1.7835  0.0
+}
+RefoldingGCutoff [Hartree] = 10.0
+QPoints = {
+  1   0.5 0.5 0.5
+  20  0.0 0.0 0.0
+  25  0.0 0.5 0.5
+}
+Basis {
+  <<+ "wfc_C.hsd"
+}

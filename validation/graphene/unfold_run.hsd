@@ -1,0 +1,22 @@
+Action = Unfold
+SumRuleQMax = 7.0
+Energy {
+  Window [eV] = {-25.0 15.0}
+  NrOfIntervals = 400
+  FermiLevel [eV] = @FERMI@
+}
+Basis {
+  <<+ "wfc_C.hsd"
+}
+RefoldingLatticeVectors [Angstrom] = {
+  2.46   0.0        0.0
+  1.23   2.1304225  0.0
+  0.0    0.0        10.0
+}
+RefoldingGCutoff [Hartree] = 8.0
+QPoints = {
+  1   0.3333333333 0.3333333333 0.0
+  30  0.0 0.0 0.0
+  20  0.5 0.0 0.0
+  25  0.3333333333 0.3333333333 0.0
+}

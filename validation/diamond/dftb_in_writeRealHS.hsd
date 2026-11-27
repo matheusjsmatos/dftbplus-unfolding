@@ -1,0 +1,39 @@
+Geometry = GenFormat {
+  8 F
+  C
+  1 1  0.0 0.0 0.0
+  2 1  0.5 0.5 0.0
+  3 1  0.5 0.0 0.5
+  4 1  0.0 0.5 0.5
+  5 1  0.25 0.25 0.25
+  6 1  0.75 0.75 0.25
+  7 1  0.75 0.25 0.75
+  8 1  0.25 0.75 0.75
+  0.0 0.0 0.0
+  3.567 0.0 0.0
+  0.0 3.567 0.0
+  0.0 0.0 3.567
+}
+Hamiltonian = DFTB {
+  SCC = Yes
+  SCCTolerance = 1e-8
+  ReadInitialCharges = Yes
+  RecomputeAfterDensity = No
+  KPointsAndWeights = {
+    0.0 0.0 0.0 1.0
+  }
+  MaxAngularMomentum { C = "p" }
+  SlaterKosterFiles = Type2FileNames {
+    Prefix = "/home/claude/work/sk/mio/mio-1-1/"
+    Separator = "-"
+    Suffix = ".skf"
+  }
+}
+Options { WriteChargesAsText = No
+  WriteDetailedXML = Yes
+  WriteRealHS = Yes
+  ShowFoldedCoords = Yes
+}
+Analysis { WriteEigenvectors = Yes }
+ParserOptions { ParserVersion = 14 }
+

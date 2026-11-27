@@ -1,0 +1,11 @@
+# Analytic, compact normalized orbital. X is a model site.
+X = {
+  AtomicNumber = 1
+  Orbital = {
+    AngularMomentum = 0
+    Occupation = 1
+    Cutoff = 2.8
+    Exponents = { 0.35 }
+    Coefficients = { 1.683823828366497 0 -0.4295468949914533 0 0.02739457238465902 }
+  }
+}

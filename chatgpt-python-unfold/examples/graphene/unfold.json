@@ -1,0 +1,60 @@
+{
+  "geometry": "supercell.gen",
+  "wfc_files": [
+    "wfc.hsd"
+  ],
+  "matrix_dir": "export",
+  "supercell_matrix": [
+    [
+      2,
+      0,
+      0
+    ],
+    [
+      0,
+      2,
+      0
+    ],
+    [
+      0,
+      0,
+      1
+    ]
+  ],
+  "path_frac": [
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      0.6666666666666666,
+      0.3333333333333333,
+      0
+    ],
+    [
+      0.5,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0
+    ]
+  ],
+  "intervals": [
+    30,
+    15,
+    25
+  ],
+  "labels": [
+    "Γ",
+    "K",
+    "M",
+    "Γ"
+  ],
+  "gcut_ry": 25,
+  "reference_ev": 0.0,
+  "q_batch": 48
+}

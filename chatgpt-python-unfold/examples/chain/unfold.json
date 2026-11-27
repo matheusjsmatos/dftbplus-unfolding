@@ -1,0 +1,51 @@
+{
+  "geometry": "chain.gen",
+  "wfc_files": [
+    "wfc.X.hsd"
+  ],
+  "supercell_matrix": [
+    [
+      2,
+      0,
+      0
+    ],
+    [
+      0,
+      1,
+      0
+    ],
+    [
+      0,
+      0,
+      1
+    ]
+  ],
+  "path_frac": [
+    [
+      -0.5,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      0.5,
+      0,
+      0
+    ]
+  ],
+  "intervals": [
+    40,
+    40
+  ],
+  "labels": [
+    "X",
+    "Γ",
+    "X"
+  ],
+  "gcut_ry": 25.0,
+  "reference_ev": 0.0
+}
