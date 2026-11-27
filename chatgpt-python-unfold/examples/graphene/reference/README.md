@@ -1,0 +1,5 @@
+# Saídas nativas de referência do grafeno 2×2
+
+Os arquivos H/S e as duas estruturas de bandas são saídas arquivadas de DFTB+ (conda-forge 26.1 serial, identificado no log como e209cb1). O XML pertence ao SCF da supercélula e fornece a geometria dobrada para o leitor Python. O teste nativo gera um novo XML na mesma execução de bandas que grava os autovetores binários. O único dado de exemplo é grafeno ideal com oito átomos de carbono e referência primitiva de dois átomos.
+
+O bloco de C usado pelo exemplo está em [wfc_C.hsd](../../../../claude-fortran-unfold/app_unfold/examples/diamond/wfc_C.hsd). Ele contém os coeficientes do carbono do conjunto mio-1-1. Os hashes em `parametros_mio.sha256` correspondem aos arquivos originais completos de C–C e Waveplot em mio. As matrizes e os autovalores incluídos são resultados de cálculo. [Origem e crédito do MIO](https://github.com/dftbparams/mio/tree/263e52419ce15222c864df9b3f6fbf58bfbdfa0f) · [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) · [Elstner et al., Phys. Rev. B 58, 7260](https://doi.org/10.1103/PhysRevB.58.7260)

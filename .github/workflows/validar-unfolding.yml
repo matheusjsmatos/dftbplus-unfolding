@@ -1,0 +1,102 @@
+name: Validar unfolding no DFTB+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "Testes/**"
+      - "docs/HOWTO.md"
+      - "docs/MANUAL.md"
+      - "chatgpt-python-unfold/**"
+      - "claude-fortran-unfold/app_unfold/**"
+      - "claude-fortran-unfold/unfold-cmake.patch"
+      - "validation/diamond/unfold.json"
+      - "validation/graphene/**"
+      - "claude-fortran-unfold/tools/plot_unfolded.py"
+      - ".github/workflows/validar-unfolding.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  offline-windows:
+    name: Suíte offline no Windows
+    runs-on: windows-latest
+    timeout-minutes: 12
+    env:
+      OPENBLAS_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r chatgpt-python-unfold/requirements.txt
+      - run: python Testes/run.py
+      - name: Conferir os comandos de unittest da versão anterior
+        working-directory: chatgpt-python-unfold
+        run: python -m unittest -v test_unfold test_compare
+
+  bandas:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Dependências científicas
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y gfortran ninja-build libopenblas-dev
+          python -m pip install -r chatgpt-python-unfold/requirements.txt Pillow reportlab matplotlib
+      - name: Testes Python e grafeno arquivado
+        run: python Testes/run.py --output results/testes
+      - name: Gerar a figura do grafeno pelo comando do HOWTO
+        run: |
+          python chatgpt-python-unfold/spectrum.py results/testes/unfolded.csv --weight refold --range -12 6 --step 0.02 --sigma 0.08 -o results/testes/mapa.npz --pdf results/testes/bandas.pdf
+          test -s results/testes/bandas.pdf
+      - name: Obter e compilar o DFTB+ e o Fortran deste repositório
+        run: |
+          mkdir -p build/deps
+          curl -fLsS --retry 3 https://github.com/dftbplus/dftbplus/releases/download/26.1/dftbplus-26.1.tar.xz -o build/deps/dftbplus.tar.xz
+          echo '0b370b7070c1bedd276906f8de2ebd95f1f90e75909f0766af895fa057924171  build/deps/dftbplus.tar.xz' | sha256sum -c -
+          tar -xJf build/deps/dftbplus.tar.xz -C build/deps
+          src="$PWD/build/deps/dftbplus-26.1"
+          cp -R claude-fortran-unfold/app_unfold "$src/app/unfold"
+          patch -d "$src" -p1 < claude-fortran-unfold/unfold-cmake.patch
+          cmake -S "$src" -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_API=ON -DWITH_OMP=OFF -DWITH_MPI=OFF -DBLAS_LIBRARY=openblas -DLAPACK_LIBRARY=openblas
+          cmake --build build/native --target dftb+ unfold --parallel 4
+      - name: Obter os arquivos mio-1-1
+        run: |
+          git clone -q https://github.com/dftbparams/mio.git build/deps/mio
+          git -C build/deps/mio checkout -q 263e52419ce15222c864df9b3f6fbf58bfbdfa0f
+      - name: Comparar Python e Fortran no grafeno e no diamante
+        run: |
+          python Testes/run.py native --dftb "$PWD/build/native/app/dftb+/dftb+" --unfold "$PWD/build/native/app/unfold/unfold" --mio "$PWD/build/deps/mio" --output results/native
+      - name: Rodar os exemplos Fortran do HOWTO e conferir as figuras
+        run: bash Testes/check_howto.sh build/native/app build/deps/mio results/howto
+      - name: Mostrar os logs de cálculo em caso de falha
+        if: failure()
+        run: |
+          if [ -d results ]; then
+            find results \( -name 'run.log' -o -name 'native.log' -o -name 'unfold.out' -o -name 'scc*.out' -o -name 'list.out' \) -print -exec tail -n 12 {} \;
+          fi
+      - name: Guardar entradas, diagnósticos e resultados
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: validacao-unfolding
+          path: |
+            results/testes/bandas.pdf
+            results/howto/**/*.png
+            results/**/*.json
+            results/**/*.log
+            results/**/dftb_in.hsd
+            results/**/unfold_in.hsd
+            results/**/band.out
+            results/**/*.unfoldedBands
+            results/**/*.refoldedBands
+            results/**/unfolded.csv
+          if-no-files-found: ignore
