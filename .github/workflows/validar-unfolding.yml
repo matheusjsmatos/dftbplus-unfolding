@@ -5,6 +5,7 @@ on:
     paths:
       - "chatgpt-python-unfold/**"
       - "claude-fortran-unfold/app_unfold/**"
+      - "claude-fortran-unfold/unfold-cmake.patch"
       - "validation/diamond/unfold.json"
       - ".github/workflows/validar-unfolding.yml"
 
@@ -43,7 +44,7 @@ jobs:
           src="$PWD/build/deps/dftbplus-25.1"
           cp -R claude-fortran-unfold/app_unfold "$src/app/unfold"
           patch -d "$src" -p1 < claude-fortran-unfold/unfold-cmake.patch
-          cmake -S "$src" -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_API=OFF -DWITH_OMP=OFF -DWITH_MPI=OFF -DBLAS_LIBRARY=openblas -DLAPACK_LIBRARY=openblas
+          cmake -S "$src" -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_API=ON -DWITH_OMP=OFF -DWITH_MPI=OFF -DBLAS_LIBRARY=openblas -DLAPACK_LIBRARY=openblas
           cmake --build build/native --target dftb+ unfold --parallel 4
       - name: Obter os arquivos mio-1-1
         run: |
@@ -55,6 +56,9 @@ jobs:
           for material in graphene diamond; do
             python chatgpt-python-unfold/tools/check_native.py "$material" --dftb "$PWD/build/native/app/dftb+/dftb+" --unfold "$PWD/build/native/app/unfold/unfold" --mio "$PWD/build/deps/mio" --output results/native || status=1
           done
+          if [ "$status" -ne 0 ]; then
+            find results/native \( -name 'run.log' -o -name 'native.log' \) -print -exec tail -n 12 {} \;
+          fi
           exit "$status"
       - name: Guardar entradas, diagnósticos e resultados
         uses: actions/upload-artifact@v4
