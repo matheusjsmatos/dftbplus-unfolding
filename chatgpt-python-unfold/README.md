@@ -1,5 +1,19 @@
 # Unfolding de bandas eletrônicas do DFTB+
 
+## Rodar e plotar o grafeno 2×2 já calculado
+
+Na pasta `chatgpt-python-unfold`, o exemplo arquivado pode ser reproduzido com Python e NumPy. A figura PDF usa Pillow e ReportLab.
+
+```bash
+python -m pip install -r requirements.txt
+python -m pip install Pillow reportlab
+python tools/check_graphene.py --output results/graphene
+python spectrum.py results/graphene/unfolded.csv --weight refold --range -12 6 --step 0.02 --sigma 0.08 -o results/graphene/mapa.npz --pdf results/graphene/bandas.pdf
+```
+
+Abra `results/graphene/bandas.pdf` para ver o espectro ao longo de Γ–K–M–Γ. O eixo horizontal mostra a distância acumulada em Å⁻¹. O exemplo usa `reference_ev = 0`, o zero das saídas DFTB+ arquivadas. Para centralizar em $E_F$, informe o nível de Fermi do SCF em `reference_ev` e gere novamente o CSV. [Depuração, diferenças de normalização e comparação nativa](docs/DEPURACAO.md)
+
+
 Este pós-processador calcula o espectro eletrônico no espaço dos momentos e o refolding na zona de Brillouin de uma célula de referência pelo método de Mayo, Yndurain e Soler. Lê as matrizes em espaço real exportadas pelo DFTB+ e as funções radiais do Waveplot. A saída é um CSV de energias e pesos por banda e spin. A execução independe de recompilar o DFTB+.
 
 Os comandos abaixo reproduzem a cadeia não ortogonal a partir da pasta `dftb_unfold`.
@@ -92,7 +106,7 @@ Numa referência incomensurável, diferentes $\mathbf q+\mathbf g_{\rm ref}$ pod
 | Cadeia com perturbação em um único sítio | O teste detecta peso nas duas bandas, verifica $C^\dagger S C=I$, invariância de fase global e a soma de peso entre momentos parceiros. |
 | Matrizes de H₂O exportadas pelo DFTB+ no conjunto público de testes do `sisl` | Leitura independente dos blocos com seis orbitais. Na indexação Python, $H[0,4]=-0{,}2885462383598692$ hartree e $S[0,4]=0{,}2439705710593631$. O maior desvio elemento a elemento de $C^\dagger S C-I$ foi $1{,}1\times10^{-15}$. Este teste verifica a leitura e a diagonalização molecular. [Matrizes originais](https://github.com/zerothi/sisl-files/tree/ed8c733c3b71c12b37aba258c169cdeeb665d7e0/tests/dftb/h2o) |
 | Projeção e formatos | Os testes incluídos verificam a transformada de um estado com interferência complexa $s/p$ por integração direta, Bessel e harmônicos até $f$, supercélula oblíqua, referência incomensurável, dois canais colineares e leitura da geometria periódica. |
-| Grafeno cristalino $2\times2$ | O caso de integração abaixo está preparado. O DFTB+ executável não estava disponível no ambiente de desenvolvimento, de modo que a comparação periódica com `band.out` permanece pendente. |
+| Grafeno cristalino $2\times2$ | A comparação com as saídas nativas da primitiva e da supercélula foi reproduzida em 71 pontos. Consulte [os resultados](docs/DEPURACAO.md). |
 
 Na cadeia, a solução de referência é $E(k)=[-0{,}30-0{,}16\cos(2\pi k)]/[1+2s\cos(2\pi k)]$ hartree. A sobreposição decorre do mesmo orbital compacto usado na projeção. A soma de pesos a corte finito mede também a convergência da expansão em ondas planas. Em bases realistas, há ainda a qualidade do ajuste das funções radiais do Waveplot em relação às integrais usadas no SK. O programa preserva os pesos absolutos calculados.
 

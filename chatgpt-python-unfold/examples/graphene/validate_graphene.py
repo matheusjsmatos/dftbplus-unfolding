@@ -25,7 +25,7 @@ def kblock(points):
     return "{\n" + rows + "\n  }"
 
 
-def calculate(exe, root, tag, gen, sk, kpoints, restart=None, dump=False):
+def calculate(exe, root, tag, gen, sk, kpoints, restart=None, dump=False, eigenvectors=False):
     folder = root / tag
     folder.mkdir()
     shutil.copyfile(gen, folder / "geom.gen")
@@ -49,11 +49,14 @@ Hamiltonian = DFTB {{
 }}
 Options {{
   WriteCharges = Yes
-  WriteDetailedXML = {"No" if restart else "Yes"}
+  WriteDetailedXML = {"Yes" if restart is None or eigenvectors else "No"}
   ShowFoldedCoords = Yes
   WriteRealHS = {"Yes" if dump else "No"}
 }}
-Analysis {{ WriteBandOut = Yes }}
+Analysis {{
+  WriteBandOut = Yes
+  WriteEigenvectors = {"Yes" if eigenvectors else "No"}
+}}
 """
     (folder / "dftb_in.hsd").write_text(text, encoding="ascii")
     log = folder / "run.log"
@@ -91,12 +94,39 @@ def native_bands(file):
     return np.array(blocks)
 
 
+def compare_native(out, pc_file, sc_file, lookup):
+    primitive = native_bands(pc_file)
+    native = native_bands(sc_file)[lookup]
+    energy = np.full_like(native, np.nan)
+    weight = np.zeros_like(native)
+    with out.open(newline="") as stream:
+        for row in csv.DictReader(stream):
+            i, j = int(row["point"])-1, int(row["band"])-1
+            energy[i, j] = float(row["energy_ev"])
+            weight[i, j] = float(row["weight_refold"])
+    if not np.isfinite(energy).all() or not np.isfinite(weight).all():
+        raise RuntimeError("missing band or nonfinite weight")
+    delta = np.abs(energy[:, :, None] - primitive[:, None, :])
+    tol_ev = 2e-4  # DFTB+ writes band.out with 4 decimal places in eV
+    leak = np.where(delta.min(axis=2) > tol_ev, weight, 0).max()
+    coverage = np.max(np.where(delta <= tol_ev, weight[:, :, None], 0), axis=1)
+    report = {"points": len(lookup), "max_supercell_band_error_eV": float(abs(energy-native).max()),
+              "max_weight_outside_primitive_bands": float(leak),
+              "min_matching_weight_per_primitive_level": float(coverage.min()),
+              "energy_tolerance_eV": tol_ev, "weight_tolerance": 1e-6}
+    report["passed"] = bool(report["max_supercell_band_error_eV"] <= tol_ev
+                            and leak < 1e-6 and coverage.min() > 1e-6)
+    return report
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dftb", default="dftb+", help="DFTB+ executable on PATH or absolute path")
     parser.add_argument("--sk-dir", type=Path, required=True, help="directory containing C-C.skf")
     parser.add_argument("--wfc", type=Path, required=True, help="matching Waveplot wfc.*.hsd")
     parser.add_argument("--workdir", type=Path, default=Path("."))
+    parser.add_argument("--save-eigenvectors", action="store_true",
+                        help="also save the native sc_bands/eigenvec.bin and matching detailed.xml")
     args = parser.parse_args()
     exe = shutil.which(args.dftb)
     if not exe:
@@ -124,34 +154,15 @@ def main():
             ("sc", root/"supercell.gen", 6, -unique_sc)]:
         mesh = f"SupercellFolding {{\n {n} 0 0\n 0 {n} 0\n 0 0 1\n 0 0 0\n }}"
         scf = calculate(exe, root, name+"_scf", geom, sk, mesh)
-        calculate(exe, root, name+"_bands", geom, sk, kblock(path), restart=scf)
+        calculate(exe, root, name+"_bands", geom, sk, kblock(path), restart=scf,
+                  eigenvectors=args.save_eigenvectors and name == "sc")
         if name == "sc":
             calculate(exe, root, "export", geom, sk, mesh, restart=scf, dump=True)
     out = root/"unfolded.csv"
     cfg["geometry"] = "sc_scf/detailed.xml"
     (root/"unfold.json").write_text(json.dumps(cfg, indent=2), encoding="utf-8")
     run(root/"unfold.json", out)
-    primitive = native_bands(root/"pc_bands"/"band.out")
-    native = native_bands(root/"sc_bands"/"band.out")[lookup]
-    energy = np.full_like(native, np.nan)
-    weight = np.zeros_like(native)
-    with out.open(newline="") as stream:
-        for row in csv.DictReader(stream):
-            i, j = int(row["point"])-1, int(row["band"])-1
-            energy[i, j] = float(row["energy_ev"])
-            weight[i, j] = float(row["weight_refold"])
-    if not np.isfinite(energy).all() or not np.isfinite(weight).all():
-        raise RuntimeError("missing band or nonfinite weight")
-    delta = np.abs(energy[:, :, None] - primitive[:, None, :])
-    tol_ev = 2e-4  # DFTB+ writes band.out with 4 decimal places in eV
-    leak = np.where(delta.min(axis=2) > tol_ev, weight, 0).max()
-    coverage = np.max(np.where(delta <= tol_ev, weight[:, :, None], 0), axis=1)
-    report = {"points": len(q), "max_supercell_band_error_eV": float(abs(energy-native).max()),
-              "max_weight_outside_primitive_bands": float(leak),
-              "min_matching_weight_per_primitive_level": float(coverage.min()),
-              "energy_tolerance_eV": tol_ev, "weight_tolerance": 1e-6}
-    report["passed"] = bool(report["max_supercell_band_error_eV"] <= tol_ev
-                            and leak < 1e-6 and coverage.min() > 1e-6)
+    report = compare_native(out, root/"pc_bands"/"band.out", root/"sc_bands"/"band.out", lookup)
     (root/"validation.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2))
     if not report["passed"]:

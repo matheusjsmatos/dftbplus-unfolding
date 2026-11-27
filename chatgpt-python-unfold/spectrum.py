@@ -8,9 +8,10 @@ import numpy as np
 
 
 def spectral_grid(filename, column, spin, lo, hi, step, sigma):
-    if not np.isfinite([lo, hi, step, sigma]).all() or hi <= lo or min(step, sigma) <= 0:
+    if not np.isfinite([lo, hi, step, sigma]).all() or hi <= lo or step <= 0 or sigma < 0:
         raise ValueError("invalid energy limits, step or Gaussian width")
     grid = np.linspace(lo, hi, int(np.ceil((hi-lo)/step))+1)
+    spacing = grid[1] - grid[0]
     profiles, coordinates = {}, {}
     with open(filename, newline="", encoding="ascii") as f:
         for row in csv.DictReader(f):
@@ -22,6 +23,15 @@ def spectral_grid(filename, column, spin, lo, hi, step, sigma):
                 profiles[idx] = np.zeros_like(grid)
             energy = float(row["energy_rel_ev"])
             weight = float(row[column])
+            if sigma == 0:
+                # Piecewise linear binning in the native app. Convert bin weight to 1/eV.
+                t = (energy - lo) / spacing
+                low = int(np.floor(t))
+                frac = t - low
+                for j, fraction in ((low, 1-frac), (low+1, frac)):
+                    if 0 <= j < len(grid):
+                        profiles[idx][j] += weight * fraction / spacing
+                continue
             left, right = np.searchsorted(grid, [energy-8*sigma, energy+8*sigma])
             if weight and right > left:
                 t = (grid[left:right]-energy)/sigma
@@ -55,7 +65,8 @@ def draw_pdf(path, x, energy, values, column, sigma, spin):
     pdf.drawString(left, 391, "DFTB+ electronic spectrum")
     pdf.setFont("Helvetica", 10)
     name = "Refolded" if column == "weight_refold" else "Fully unfolded"
-    pdf.drawString(left, 372, f"{name}  |  spin {spin}  |  Gaussian width {sigma:g} eV")
+    broadening = f"Gaussian width {sigma:g} eV" if sigma else "linear bins"
+    pdf.drawString(left, 372, f"{name}  |  spin {spin}  |  {broadening}")
     pdf.drawImage(ImageReader(image), left, bottom, width, height)
     pdf.setLineWidth(0.6)
     pdf.rect(left, bottom, width, height)
@@ -89,7 +100,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("csv", type=Path)
     parser.add_argument("--range", nargs=2, type=float, required=True, metavar=("MIN", "MAX"))
-    parser.add_argument("--sigma", type=float, default=.06)
+    parser.add_argument("--sigma", type=float, default=.06, help="Gaussian width in eV; use 0 for linear bins")
     parser.add_argument("--step", type=float, default=.01)
     parser.add_argument("--spin", type=int, default=1)
     parser.add_argument("--weight", choices=["full", "refold"], default="refold")

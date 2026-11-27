@@ -1,0 +1,73 @@
+name: Validar unfolding no DFTB+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "chatgpt-python-unfold/**"
+      - "claude-fortran-unfold/app_unfold/**"
+      - "validation/diamond/unfold.json"
+      - ".github/workflows/validar-unfolding.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  bandas:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Dependências científicas
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y gfortran ninja-build libopenblas-dev
+          python -m pip install -r chatgpt-python-unfold/requirements.txt
+      - name: Testes Python e grafeno arquivado
+        working-directory: chatgpt-python-unfold
+        run: |
+          python -m unittest discover -v
+          python tools/check_graphene.py --output ../results/arquivado
+          python tools/check_projection.py ../results/arquivado/unfolded.csv --output ../results/arquivado/projection.json
+      - name: Obter e compilar o DFTB+ e o Fortran deste repositório
+        run: |
+          mkdir -p build/deps
+          curl -fLsS --retry 3 https://github.com/dftbplus/dftbplus/releases/download/25.1/dftbplus-25.1.tar.xz -o build/deps/dftbplus.tar.xz
+          echo '0a9b8042e968105b53f49c56f0524e1f9ed2b3c5c511b03c1aea0bcc416d7275  build/deps/dftbplus.tar.xz' | sha256sum -c -
+          tar -xJf build/deps/dftbplus.tar.xz -C build/deps
+          src="$PWD/build/deps/dftbplus-25.1"
+          cp -R claude-fortran-unfold/app_unfold "$src/app/unfold"
+          patch -d "$src" -p1 < claude-fortran-unfold/unfold-cmake.patch
+          cmake -S "$src" -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_API=OFF -DWITH_OMP=OFF -DWITH_MPI=OFF -DBLAS_LIBRARY=openblas -DLAPACK_LIBRARY=openblas
+          cmake --build build/native --target dftb+ unfold --parallel 4
+      - name: Obter os arquivos mio-1-1
+        run: |
+          git clone -q https://github.com/dftbparams/mio.git build/deps/mio
+          git -C build/deps/mio checkout -q 263e52419ce15222c864df9b3f6fbf58bfbdfa0f
+      - name: Comparar Python e Fortran no grafeno e no diamante
+        run: |
+          status=0
+          for material in graphene diamond; do
+            python chatgpt-python-unfold/tools/check_native.py "$material" --dftb "$PWD/build/native/app/dftb+/dftb+" --unfold "$PWD/build/native/app/unfold/unfold" --mio "$PWD/build/deps/mio" --output results/native || status=1
+          done
+          exit "$status"
+      - name: Guardar entradas, diagnósticos e resultados
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: validacao-unfolding
+          path: |
+            results/**/*.json
+            results/**/*.log
+            results/**/dftb_in.hsd
+            results/**/unfold_in.hsd
+            results/**/band.out
+            results/**/*.unfoldedBands
+            results/**/*.refoldedBands
+            results/**/unfolded.csv
+          if-no-files-found: ignore

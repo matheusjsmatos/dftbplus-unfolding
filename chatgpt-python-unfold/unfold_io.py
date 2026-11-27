@@ -221,7 +221,8 @@ def _hsd_tree(text):
     return group(False)
 
 
-def read_basis(paths, species, orbital_counts):
+def read_basis(paths, species, orbital_counts, *, atomic_numbers=None):
+    """Read active shells and optionally collect Waveplot atomic numbers for native HSD."""
     needed = dict(zip(species, orbital_counts))
     if any(needed[s] != n for s, n in zip(species, orbital_counts)):
         raise ValueError("inconsistent orbital counts for a single GEN species")
@@ -235,6 +236,8 @@ def read_basis(paths, species, orbital_counts):
                 continue
             if name in basis or len(tree[name.lower()]) != 1:
                 raise ValueError(f"duplicate basis for {name}")
+            if atomic_numbers is not None:
+                atomic_numbers[name] = int(tree[name.lower()][0].get("atomicnumber", [0])[0])
             shells = []
             count = 0
             for orb in tree[name.lower()][0].get("orbital", []):
