@@ -5,6 +5,6 @@ fornecido pelo autor do repositório, gerado com o ChatGPT (OpenAI).
 
 - Linguagem: Python 3.9+ / NumPy (SciPy opcional).
 - Os arquivos de código, o README original (em português) e os exemplos estão exatamente como recebidos.
-- A licença do código original não foi especificada. Antes de redistribuir publicamente, defina a licença com o autor.
-- A licença LGPL-3.0 do arquivo `LICENSE` na raiz se aplica apenas ao código Fortran em `claude-fortran-unfold/`.
+- Licença: MIT (arquivo `LICENSE` nesta pasta), escolhida pelo autor do repositório, Matheus J. S. Matos.
+- A licença LGPL-3.0 em `claude-fortran-unfold/LICENSE` se aplica apenas ao código Fortran.
 - Comparação com a implementação em Fortran: `docs/COMPARACAO.md`.

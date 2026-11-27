@@ -50,4 +50,4 @@ nos dois). Com 3ob nos SK e mio no wfc, a regra de soma falhou (0,4–3,8). Com 
 
 ## Licença
 
-Código Fortran: LGPL-3.0 (`LICENSE`), compatível com o DFTB+. Código em `chatgpt-python-unfold/`: licença não especificada.
+Duas licenças, detalhadas em `LICENSES.md`: código Fortran em LGPL-3.0 (compatível com o DFTB+) e código Python do ChatGPT em MIT.
