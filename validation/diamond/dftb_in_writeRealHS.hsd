@@ -24,7 +24,7 @@ Hamiltonian = DFTB {
   }
   MaxAngularMomentum { C = "p" }
   SlaterKosterFiles = Type2FileNames {
-    Prefix = "/home/claude/work/sk/mio/mio-1-1/"
+    Prefix = "/caminho/para/mio-1-1/"
     Separator = "-"
     Suffix = ".skf"
   }

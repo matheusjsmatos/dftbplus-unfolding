@@ -11,6 +11,8 @@ O utilitário `Util/Unfolding` do SIESTA serviu de modelo de referência.
 
 Documentação em `docs/`:
 
+- `MANUAL.md`: referência de entradas, saídas e opções dos dois programas.
+- `HOWTO.md`: receitas por tarefa, com o tutorial completo no diamante.
 - `METODO.md`: como o unfolding é feito (equações e convenções do DFTB+).
 - `DESENVOLVIMENTO_CLAUDE.md`: procedimento de desenvolvimento do código Fortran.
 - `DESENVOLVIMENTO_CHATGPT.md`: o que o código do ChatGPT faz e como foi analisado.
@@ -50,4 +52,4 @@ nos dois). Com 3ob nos SK e mio no wfc, a regra de soma falhou (0,4–3,8). Com 
 
 ## Licença
 
-Duas licenças, detalhadas em `LICENSES.md`: código Fortran em LGPL-3.0 (compatível com o DFTB+) e código Python do ChatGPT em MIT.
+Código Fortran: LGPL-3.0 (`LICENSE`), compatível com o DFTB+. Código em `chatgpt-python-unfold/`: licença não especificada.

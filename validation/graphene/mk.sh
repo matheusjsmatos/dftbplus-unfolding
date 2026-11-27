@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
-B=/home/claude/work/build/app
+B="${BIN:?defina BIN com o diretorio build/app do DFTB+}"
 cd "$(dirname "$0")"
 rm -rf run1 run2 prim; mkdir run1 run2 prim prim/bands
-SK=/home/claude/work/sk/mio/mio-1-1/
+SK="${SKDIR:?defina SKDIR com o diretorio dos SK mio-1-1}/"
 hsd() { # genfile kpoints-block extra
 cat <<EOT
 Geometry = GenFormat {
