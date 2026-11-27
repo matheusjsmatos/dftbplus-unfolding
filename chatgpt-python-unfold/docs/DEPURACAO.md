@@ -31,6 +31,8 @@ O depósito linear com $\sigma=0$ reparte a linha entre os dois pontos de energi
 
 ## Reproduzir a validação nativa
 
+O aplicativo Fortran deste repositório usa as assinaturas do DFTB+ 26.1 para `printDftbHeader` e `warnUnprocessedNodes`. A tentativa de compilação com 25.1 identificou uma incompatibilidade nessas duas chamadas. O teste usa o pacote-fonte 26.1 e verifica seu SHA-256 antes de compilar. [Release 26.1](https://github.com/dftbplus/dftbplus/releases/tag/26.1)
+
 Na pasta `chatgpt-python-unfold`, com `dftb+` e o `unfold` deste repositório compilados e o repositório mio-1-1 descompactado, execute
 
 ```bash
@@ -38,6 +40,6 @@ python tools/check_native.py graphene --dftb /caminho/dftb+ --unfold /caminho/un
 python tools/check_native.py diamond  --dftb /caminho/dftb+ --unfold /caminho/unfold --mio /caminho/mio --output results/native
 ```
 
-O script verifica os hashes de `skfiles/C-C.skf` e `extras/wfc.hsd`, cria diretórios novos e faz um cálculo com depósito linear e outro com σ=0,08 eV para cada material. Para comparar uma saída já disponível, use `tools/compare_backends.py --help`. O fluxo [GitHub Actions](../../.github/workflows/validar-unfolding.yml) contém os comandos de compilação do DFTB+ 25.1 e publica os relatórios `comparison.json`, as entradas e os logs. Os critérios-padrão do ensaio são 0,003 para o erro máximo relativo ao pico e 0,002 para o L1 relativo. Uma janela vazia é registrada como erro. Os limites são critérios de reprodução numérica para estas malhas e parâmetros.
+O script verifica os hashes de `skfiles/C-C.skf` e `extras/wfc.hsd`, cria diretórios novos e faz um cálculo com depósito linear e outro com σ=0,08 eV para cada material. Para comparar uma saída já disponível, use `tools/compare_backends.py --help`. O fluxo [GitHub Actions](../../.github/workflows/validar-unfolding.yml) contém os comandos de compilação do DFTB+ 26.1 e publica os relatórios `comparison.json`, as entradas e os logs. Os critérios-padrão do ensaio são 0,003 para o erro máximo relativo ao pico e 0,002 para o L1 relativo. Uma janela vazia é registrada como erro. Os limites são critérios de reprodução numérica para estas malhas e parâmetros.
 
 O conjunto **mio-1-1** fornece os parâmetros C–C e os radiais de carbono. O teste arquivado usou grafeno com $a=2,46$ Å, altura de 18 Å, 100 K e malhas SCC 12×12×1 e 6×6×1. O corte de 25 Ry (12,5 Ha) inclui 1.375 vetores de refolding. No diamante, a célula convencional tem 8 C, $a=3,567$ Å, caminho L–Γ–X com 46 pontos e corte de 20 Ry. A comparação contempla os casos eletrônicos escalar e colinear suportados pelo software. A validação numérica aqui usa carbono s,p. [DFTB+, Hourahine et al.](https://doi.org/10.1063/1.5143190) · [SCC-DFTB, Elstner et al.](https://doi.org/10.1103/PhysRevB.58.7260) · [Parâmetros usados](https://github.com/dftbparams/mio/tree/263e52419ce15222c864df9b3f6fbf58bfbdfa0f)

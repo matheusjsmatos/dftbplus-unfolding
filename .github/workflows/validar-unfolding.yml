@@ -38,10 +38,10 @@ jobs:
       - name: Obter e compilar o DFTB+ e o Fortran deste repositório
         run: |
           mkdir -p build/deps
-          curl -fLsS --retry 3 https://github.com/dftbplus/dftbplus/releases/download/25.1/dftbplus-25.1.tar.xz -o build/deps/dftbplus.tar.xz
-          echo '0a9b8042e968105b53f49c56f0524e1f9ed2b3c5c511b03c1aea0bcc416d7275  build/deps/dftbplus.tar.xz' | sha256sum -c -
+          curl -fLsS --retry 3 https://github.com/dftbplus/dftbplus/releases/download/26.1/dftbplus-26.1.tar.xz -o build/deps/dftbplus.tar.xz
+          echo '0b370b7070c1bedd276906f8de2ebd95f1f90e75909f0766af895fa057924171  build/deps/dftbplus.tar.xz' | sha256sum -c -
           tar -xJf build/deps/dftbplus.tar.xz -C build/deps
-          src="$PWD/build/deps/dftbplus-25.1"
+          src="$PWD/build/deps/dftbplus-26.1"
           cp -R claude-fortran-unfold/app_unfold "$src/app/unfold"
           patch -d "$src" -p1 < claude-fortran-unfold/unfold-cmake.patch
           cmake -S "$src" -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_API=ON -DWITH_OMP=OFF -DWITH_MPI=OFF -DBLAS_LIBRARY=openblas -DLAPACK_LIBRARY=openblas

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare both programs on fresh DFTB+ 25.1 output for graphene or diamond."""
+"""Compare both programs on fresh DFTB+ 26.1 output for graphene or diamond."""
 import argparse
 import hashlib
 import json
